@@ -11,6 +11,7 @@ import torch
 from pydantic import ConfigDict, Field, field_validator, model_validator
 
 import vllm.envs as envs
+from vllm.config.mm_prefix import maybe_disable_mm_prefix_lm_for_text_only
 from vllm.config.model_arch import (
     ModelArchitectureConfig,
 )
@@ -744,6 +745,8 @@ class ModelConfig:
                     "--renderer-num-workers 1 (the default), or "
                     "disable the cache with --mm-processor-cache-gb 0."
                 )
+
+            maybe_disable_mm_prefix_lm_for_text_only(self)
 
         if self.disable_sliding_window:
             # Set after get_and_verify_max_len to ensure that max_model_len
