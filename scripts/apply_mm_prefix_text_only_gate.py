@@ -8,13 +8,13 @@ from pathlib import Path
 import vllm
 
 CALL_NEEDLE = (
-    "                    disable the cache with --mm-processor-cache-gb 0.\n"
+    "                    disable the cache with --mm-processor-cache-gb 0.\"\n"
     "                )\n"
     "\n"
     "        if self.disable_sliding_window:"
 )
 CALL_REPL = (
-    "                    disable the cache with --mm-processor-cache-gb 0.\n"
+    "                    disable the cache with --mm-processor-cache-gb 0.\"\n"
     "                )\n"
     "\n"
     "            self._apply_mm_prefix_lm_limits()\n"
