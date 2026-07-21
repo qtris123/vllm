@@ -33,6 +33,14 @@ METHOD = '''\
         config preserves the derived flag (including ``with_hf_config``).
         No-op until ``multimodal_config`` is initialized.
         """
+        # Sticky decision from the multimodal top-level config so text-only
+        # sub-configs (e.g. Gemma4ForCausalLM via with_hf_config) do not need
+        # the multimodal processor registry and cannot restore the flag.
+        if getattr(self, "_mm_prefix_lm_disabled", False):
+            return (
+                replace(arch, is_mm_prefix_lm=False) if arch.is_mm_prefix_lm else arch
+            )
+
         if not arch.is_mm_prefix_lm:
             return arch
 
@@ -45,7 +53,12 @@ METHOD = '''\
         else:
             from vllm.multimodal import MULTIMODAL_REGISTRY
 
-            info = MULTIMODAL_REGISTRY.get_processing_info(self)
+            try:
+                info = MULTIMODAL_REGISTRY.get_processing_info(self)
+            except ValueError:
+                # Current architectures are not multimodal (language submodule).
+                return arch
+
             vision_modalities = {"image", "video"} & info.supported_mm_limits.keys()
             if not vision_modalities or any(
                 info.allowed_mm_limits[modality] > 0 for modality in vision_modalities
@@ -56,6 +69,7 @@ METHOD = '''\
                 "--limit-mm-per-prompt"
             )
 
+        self._mm_prefix_lm_disabled = True
         logger.info_once(
             "Disabled mm_prefix attention mode because %s. Attention backends without "
             "mm_prefix support may now be selected.",
@@ -92,7 +106,10 @@ def main() -> None:
     path = Path(vllm.__file__).resolve().parent / "config" / "model.py"
     text = path.read_text()
 
-    if "_apply_mm_prefix_lm_limits" in text and "self._apply_mm_prefix_lm_limits(convertor.convert())" in text:
+    if (
+        "_apply_mm_prefix_lm_limits" in text
+        and "self._apply_mm_prefix_lm_limits(convertor.convert())" in text
+    ):
         print("PATCHED_MM_PREFIX_ARCH_ALREADY", path)
         return
 
@@ -111,8 +128,11 @@ def main() -> None:
 
     if OLD_GET not in text:
         raise SystemExit(f"get_model_arch_config needle missing in {path}")
-    # Insert helper immediately before get_model_arch_config, then rewrite return.
-    text = text.replace(OLD_GET, METHOD + NEW_GET.removeprefix("    def get_model_arch_config(\n"), 1)
+    text = text.replace(
+        OLD_GET,
+        METHOD + NEW_GET.removeprefix("    def get_model_arch_config(\n"),
+        1,
+    )
 
     path.write_text(text)
     print("PATCHED_MM_PREFIX_ARCH", path)
